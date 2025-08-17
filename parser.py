@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 zakaz_all = []
+second_one = 0
 for i in range(3):
     print(i)
     session = requests.Session()
@@ -32,13 +33,17 @@ for i in range(3):
         zakaz_href = "https://zakupki.gov.ru/"+id_stat_block.find("a")["href"]
         # print(date_published, status, id, zakazchik, price, zakaz_href)
         print(zakaz_href)
-        response = requests.get(zakaz_href)
-        soup = BeautifulSoup(response.text, features="html.parser")
-        # main_info = soup.find("div", class_="col")
-        # print(main_info)
-        # block_title = main_info("h2", class_="blockInfo__title")
-        # print(main_info)
-        main = soup.find_all("section", class_="blockInfo__section section")
+        main = 0
+        for _ in range(10):
+            response = session.get(zakaz_href)
+            soup = BeautifulSoup(response.text, features="html.parser")
+            # main_info = soup.find("div", class_="col")
+            # print(main_info)
+            # block_title = main_info("h2", class_="blockInfo__title")
+            # print(main_info)
+            main = soup.find_all("section", class_="blockInfo__section section")
+            if main:
+                break
         if main:
             for row in main:
                 try:
@@ -56,7 +61,8 @@ for i in range(3):
         else:
             main = soup.find_all("div", class_="col-9 mr-auto")
             if main:
-                # print("row2")
+                print("row2")
+                second_one += 1
                 for row in main:
                     try:
                         title = row.find("div", class_="common-text__title")
@@ -75,4 +81,4 @@ for i in range(3):
             else:
                 print("MAIN", main)
 print("____________________________________пропарсил____________________________________")
-print(len(zakaz_all))
+print(len(zakaz_all), second_one)
