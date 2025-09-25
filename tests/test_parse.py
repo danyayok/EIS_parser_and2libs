@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from bs4 import BeautifulSoup, Tag
 import requests
-from src.parser_zakazi import parser_zakazi
+from src.main import parser_zakazi
 
 
 class TestParserZakaziInitialization:
