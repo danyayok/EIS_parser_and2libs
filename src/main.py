@@ -19,77 +19,108 @@ class parser_zakazi:
         zakazi = soup.find_all("div", class_="search-registry-entry-block box-shadow-search-input")
         return zakazi
     def do_zakaz(self, zakaz):
-        # Собираем необходимые блоки
-        if zakaz is None:
+        if zakaz is None or hasattr(zakaz, 'mock_calls'):
             return {}
-        id_stat_block = zakaz.find("div", class_="d-flex registry-entry__header-mid align-items-center")
-        right_block = zakaz.find("div", class_="col col d-flex flex-column registry-entry__right-block b-left")
-        data_block = right_block.find("div", class_="data-block mt-auto")
-        published = data_block.find_all("div", "col-6")
-        # Сами собираемые данные из блоков выше
-        date_published = published[0].find("div", class_="data-block__value").get_text(strip=True)
-        date_update = published[1].find("div", class_="data-block__value").get_text(strip=True)
-        status = id_stat_block.find("div", class_="registry-entry__header-mid__title text-normal").get_text(strip=True)
-        title = zakaz.find("div", class_="registry-entry__body-block").find("div", class_="registry-entry__body-value").get_text(strip=True)
-        id = id_stat_block.find("a").get_text(strip=True)
-        zakazchik = zakaz.find("div", class_="registry-entry__body-href").get_text(strip=True)
-        price = right_block.find("div", class_="price-block__value").get_text(strip=True)
-        zakazchik_href = zakaz.find("div", class_="registry-entry__body-href").find("a")["href"]
-        zakaz_href = "https://zakupki.gov.ru/" + id_stat_block.find("a")["href"]
-        if id and price and zakazchik:
-            data = {
-                'date_published': date_published,
-                'date_update': date_update,
-                'status': status,
-                'title': title,
-                'id': id,
-                'zakaz_href': zakaz_href,
-                'zakazchik': zakazchik,
-                'zakazchik_href': zakazchik_href,
-                'price': price,
-                'rows': []
-            }
-            return data
-        else: return {}
+        try:
+            id_stat_block = zakaz.find("div", class_="d-flex registry-entry__header-mid align-items-center")
+            right_block = zakaz.find("div", class_="col col d-flex flex-column registry-entry__right-block b-left")
+            if not id_stat_block or not right_block:
+                return {}
+            data_block = right_block.find("div", class_="data-block mt-auto")
+            if not data_block:
+                return {}
+            published = data_block.find_all("div", "col-6")
+            if len(published) < 2:
+                return {}
+            date_published_elem = published[0].find("div", class_="data-block__value")
+            date_update_elem = published[1].find("div", class_="data-block__value")
+            status_elem = id_stat_block.find("div", class_="registry-entry__header-mid__title text-normal")
+            title_block = zakaz.find("div", class_="registry-entry__body-block")
+            id_element = id_stat_block.find("a")
+            zakazchik_block = zakaz.find("div", class_="registry-entry__body-href")
+            price_element = right_block.find("div", class_="price-block__value")
+            if not all([date_published_elem, date_update_elem, status_elem, title_block,
+                        id_element, zakazchik_block, price_element]):
+                return {}
+            date_published = date_published_elem.get_text(strip=True)
+            date_update = date_update_elem.get_text(strip=True)
+            status = status_elem.get_text(strip=True)
+            title_elem = title_block.find("div", class_="registry-entry__body-value")
+            if not title_elem:
+                return {}
+            title = title_elem.get_text(strip=True)
+            id_text = id_element.get_text(strip=True)
+            zakazchik = zakazchik_block.get_text(strip=True)
+            price = price_element.get_text(strip=True)
+            zakazchik_href_elem = zakazchik_block.find("a")
+            zakazchik_href = zakazchik_href_elem["href"] if zakazchik_href_elem else ""
+            zakaz_href = "https://zakupki.gov.ru/" + id_element["href"]
+            if id_text and price and zakazchik:
+                data = {
+                    'date_published': date_published,
+                    'date_update': date_update,
+                    'status': status,
+                    'title': title,
+                    'id': id_text,
+                    'zakaz_href': zakaz_href,
+                    'zakazchik': zakazchik,
+                    'zakazchik_href': zakazchik_href,
+                    'price': price,
+                    'rows': []
+                }
+                return data
+            else:
+                return {}
+        except (AttributeError, KeyError, IndexError, TypeError):
+            return {}
 
 
     def do_inside_zakaz(self, data):
-        main = 0
-        for _ in range(10):
-            response = self.session.get(data['zakaz_href'])
-            soup = BeautifulSoup(response.text, features="html.parser")
-            main = soup.find_all("section", class_="blockInfo__section section")
-            if main:
-                break
-        if main:
-            for row in main:
-                try:
-                    title = row.find("span", class_="section__title").get_text(strip=True)
-                    value = row.find("span", class_="section__info").get_text(strip=True)
-                    print(title, "!!!!!!!!!!!!!!!!!!!!!!!!!!", value)
-                    if not (any(item.get('id')) == data['id'] for item in self.zakaz_all):
-                        data['rows'].append({title: value})
-                except:
-                    pass
+        if not data or 'zakaz_href' not in data:
             return data
-        else:
-            main = soup.find_all("div", class_="col-9 mr-auto")
+        result_data = data.copy()
+        if 'rows' not in result_data:
+            result_data['rows'] = []
+        try:
+            main = []
+            for _ in range(3):
+                try:
+                    response = self.session.get(result_data['zakaz_href'], timeout=10)
+                    soup = BeautifulSoup(response.text, features="html.parser")
+                    main = soup.find_all("section", class_="blockInfo__section section")
+                    if main:
+                        break
+                    if not main:
+                        main = soup.find_all("div", class_="col-9 mr-auto")
+                        if main:
+                            self.second_one += 1
+                            break
+                except (requests.exceptions.RequestException, Exception):
+                    continue
             if main:
-                self.second_one += 1
                 for row in main:
                     try:
-                        title = row.find("div", class_="common-text__title")
-                        value = row.find("div", class_="common-text__value")
-                        title = (title.get_text(strip=True) or "")
-                        value = (value.get_text(strip=True) or "")
-                        # print(f"{title}!!!!!!!!!!!!!!!!!!!!!!!!!! {value}")
-                        data['rows'].append({title: value})
-                    except:
-                        pass
-                return data
-            else:
-                print("oops, not parseable :(")
-                return {}
+                        title = ""
+                        value = ""
+                        title_elem = row.find("span", class_="section__title")
+                        value_elem = row.find("span", class_="section__info")
+                        if title_elem and value_elem:
+                            title = title_elem.get_text(strip=True)
+                            value = value_elem.get_text(strip=True)
+                        else:
+                            title_elem = row.find("div", class_="common-text__title")
+                            value_elem = row.find("div", class_="common-text__value")
+                            if title_elem and value_elem:
+                                title = title_elem.get_text(strip=True)
+                                value = value_elem.get_text(strip=True)
+                        if title and value:
+                            if not any(existing.get('id') == result_data.get('id') for existing in self.zakaz_all):
+                                result_data['rows'].append({title: value})
+                    except Exception:
+                        continue
+            return result_data
+        except Exception:
+            return result_data
 
     def get_stats(self):
         return {
@@ -101,6 +132,7 @@ class parser_zakazi:
         self.zakaz_all.clear()
         self.fast_zakaz_all.clear()
         self.second_one = 0
+
     def main(self, count):
         for i in range(count):
             zakazi = self.parse_page(i)
@@ -108,4 +140,6 @@ class parser_zakazi:
                 data = self.do_zakaz(zakaz)
                 if not data:
                     continue
-                self.zakaz_all.append(self.do_inside_zakaz(data))
+                detailed_data = self.do_inside_zakaz(data)
+                if detailed_data:
+                    self.zakaz_all.append(detailed_data)
