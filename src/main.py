@@ -20,6 +20,8 @@ class parser_zakazi:
         return zakazi
     def do_zakaz(self, zakaz):
         # Собираем необходимые блоки
+        if zakaz is None:
+            return {}
         id_stat_block = zakaz.find("div", class_="d-flex registry-entry__header-mid align-items-center")
         right_block = zakaz.find("div", class_="col col d-flex flex-column registry-entry__right-block b-left")
         data_block = right_block.find("div", class_="data-block mt-auto")

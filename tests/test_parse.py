@@ -41,7 +41,7 @@ class TestParserZakaziInitialization:
 class TestParsePage:
     """Тесты парсинга страницы"""
 
-    @patch('src.parser_zakazi.requests.Session.get')
+    @patch('src.main.requests.Session.get')
     def test_parse_page_success(self, mock_get):
         """Успешный парсинг страницы с закупками"""
         # Arrange
@@ -73,7 +73,7 @@ class TestParsePage:
         assert "pageNumber=1" in mock_get.call_args[0][0]
         assert "recordsPerPage=_10" in mock_get.call_args[0][0]
 
-    @patch('src.parser_zakazi.requests.Session.get')
+    @patch('src.main.requests.Session.get')
     def test_parse_page_empty(self, mock_get):
         """Парсинг пустой страницы"""
         # Arrange
@@ -89,7 +89,7 @@ class TestParsePage:
         # Assert
         assert result == []
 
-    @patch('src.parser_zakazi.requests.Session.get')
+    @patch('src.main.requests.Session.get')
     def test_parse_page_network_error(self, mock_get):
         """Обработка сетевой ошибки при парсинге страницы"""
         # Arrange
@@ -227,7 +227,7 @@ class TestDoInsideZakaz:
             'rows': []
         }
 
-    @patch('src.parser_zakazi.requests.Session.get')
+    @patch('src.main.requests.Session.get')
     def test_do_inside_zakaz_format1_success(self, mock_get, sample_zakaz_data):
         """Успешный парсинг детальной страницы (формат 1)"""
         # Arrange
@@ -262,7 +262,7 @@ class TestDoInsideZakaz:
         assert {'Начальная цена:': '15 000 000 руб.'} in result['rows']
         mock_get.assert_called_once_with(sample_zakaz_data['zakaz_href'])
 
-    @patch('src.parser_zakazi.requests.Session.get')
+    @patch('src.main.requests.Session.get')
     def test_do_inside_zakaz_format2_success(self, mock_get, sample_zakaz_data):
         """Успешный парсинг детальной страницы (формат 2)"""
         # Arrange
@@ -293,7 +293,7 @@ class TestDoInsideZakaz:
         assert {'Ответственное лицо:': 'Иванов И.И.'} in result['rows']
         assert parser.second_one == initial_second_one + 1  # Счетчик увеличился
 
-    @patch('src.parser_zakazi.requests.Session.get')
+    @patch('src.main.requests.Session.get')
     def test_do_inside_zakaz_duplicate_prevention(self, mock_get, sample_zakaz_data):
         """Проверка предотвращения дубликатов"""
         # Arrange
@@ -316,7 +316,7 @@ class TestDoInsideZakaz:
         # Assert
         assert len(result['rows']) == 0  # Дубликат не должен добавиться
 
-    @patch('src.parser_zakazi.requests.Session.get')
+    @patch('src.main.requests.Session.get')
     def test_do_inside_zakaz_network_error(self, mock_get, sample_zakaz_data):
         """Обработка сетевой ошибки при парсинге детальной страницы"""
         # Arrange
@@ -331,7 +331,7 @@ class TestDoInsideZakaz:
         assert result == sample_zakaz_data  # Данные не изменились
         assert mock_get.call_count == 3  # 3 попытки
 
-    @patch('src.parser_zakazi.requests.Session.get')
+    @patch('src.main.requests.Session.get')
     def test_do_inside_zakaz_unparseable_format(self, mock_get, sample_zakaz_data):
         """Парсинг страницы с неизвестным форматом"""
         # Arrange
@@ -364,9 +364,9 @@ class TestDoInsideZakaz:
 class TestMainMethod:
     """Тесты основного метода парсера"""
 
-    @patch('src.parser_zakazi.parser_zakazi.do_inside_zakaz')
-    @patch('src.parser_zakazi.parser_zakazi.do_zakaz')
-    @patch('src.parser_zakazi.parser_zakazi.parse_page')
+    @patch('src.main.parser_zakazi.do_inside_zakaz')
+    @patch('src.main.parser_zakazi.do_zakaz')
+    @patch('src.main.parser_zakazi.parse_page')
     def test_main_success_flow(self, mock_parse_page, mock_do_zakaz, mock_do_inside_zakaz):
         """Успешный полный цикл парсинга"""
         # Arrange
@@ -385,7 +385,7 @@ class TestMainMethod:
         assert mock_do_inside_zakaz.call_count == 4
         assert len(parser.zakaz_all) == 4
 
-    @patch('src.parser_zakazi.parser_zakazi.parse_page')
+    @patch('src.main.parser_zakazi.parse_page')
     def test_main_empty_pages(self, mock_parse_page):
         """Парсинг пустых страниц"""
         # Arrange
@@ -400,7 +400,7 @@ class TestMainMethod:
         assert mock_parse_page.call_count == 3
         assert len(parser.zakaz_all) == 0
 
-    @patch('src.parser_zakazi.parser_zakazi.parse_page')
+    @patch('src.main.parser_zakazi.parse_page')
     def test_main_with_invalid_data(self, mock_parse_page):
         """Парсинг с невалидными данными"""
         # Arrange
@@ -450,7 +450,7 @@ class TestEdgeCases:
     """Тесты граничных случаев"""
 
     @pytest.mark.parametrize("count", [0, 1, 5, 100])
-    @patch('src.parser_zakazi.parser_zakazi.parse_page')
+    @patch('src.main.parser_zakazi.parse_page')
     def test_main_different_page_counts(self, mock_parse_page, count):
         """Тест разного количества страниц"""
         # Arrange
@@ -464,7 +464,7 @@ class TestEdgeCases:
         # Assert
         assert mock_parse_page.call_count == count
 
-    @patch('src.parser_zakazi.requests.Session.get')
+    @patch('src.main.requests.Session.get')
     def test_special_characters_handling(self, mock_get):
         """Тест обработки специальных символов"""
         # Arrange
@@ -490,7 +490,7 @@ class TestEdgeCases:
 class TestIntegration:
     """Интеграционные тесты"""
 
-    @patch('src.parser_zakazi.requests.Session.get')
+    @patch('src.main.requests.Session.get')
     def test_full_integration(self, mock_get):
         """Полный интеграционный тест"""
         # Arrange - мокируем оба запроса
