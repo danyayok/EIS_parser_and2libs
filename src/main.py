@@ -13,25 +13,36 @@ class parser_zakazi:
                                "Chrome/90.0.4430.93 Safari/537.36")
             })
     def parse_page(self, count):
-        url = f"https://zakupki.gov.ru/epz/order/extendedsearch/results.html?searchString=&morphology=on&search-filter=%D0%94%D0%B0%D1%82%D0%B5+%D0%BE%D0%B1%D0%BD%D0%BE%D0%B2%D0%BB%D0%B5%D0%BD%D0%B8%D1%8F&pageNumber={count + 1}&sortDirection=false&recordsPerPage=_10&showLotsInfoHidden=false&savedSearchSettingsIdHidden=&sortBy=UPDATE_DATE&fz44=on&fz223=on&af=on&ca=on&pc=on&pa=on&placingWayList=&selectedLaws=&priceFromGeneral=&priceFromGWS=&priceFromUnitGWS=&priceToGeneral=&priceToGWS=&priceToUnitGWS=&currencyIdGeneral=-1&publishDateFrom=&publishDateTo=&applSubmissionCloseDateFrom=&applSubmissionCloseDateTo=&customerIdOrg=&customerFz94id=&customerTitle=&okpd2Ids=&okpd2IdsCodes="
-        response = self.session.get(url)
-        soup = BeautifulSoup(response.text, features="html.parser")
-        zakazi = soup.find_all("div", class_="search-registry-entry-block box-shadow-search-input")
-        return zakazi
+        try:
+            url = f"https://zakupki.gov.ru/epz/order/extendedsearch/results.html?searchString=&morphology=on&search-filter=%D0%94%D0%B0%D1%82%D0%B5+%D0%BE%D0%B1%D0%BD%D0%BE%D0%B2%D0%BB%D0%B5%D0%BD%D0%B8%D1%8F&pageNumber={count + 1}&sortDirection=false&recordsPerPage=_10&showLotsInfoHidden=false&savedSearchSettingsIdHidden=&sortBy=UPDATE_DATE&fz44=on&fz223=on&af=on&ca=on&pc=on&pa=on&placingWayList=&selectedLaws=&priceFromGeneral=&priceFromGWS=&priceFromUnitGWS=&priceToGeneral=&priceToGWS=&priceToUnitGWS=&currencyIdGeneral=-1&publishDateFrom=&publishDateTo=&applSubmissionCloseDateFrom=&applSubmissionCloseDateTo=&customerIdOrg=&customerFz94id=&customerTitle=&okpd2Ids=&okpd2IdsCodes="
+            response = self.session.get(url, timeout=10)
+            soup = BeautifulSoup(response.text, features="html.parser")
+            zakazi = soup.find_all("div", class_="search-registry-entry-block box-shadow-search-input")
+            return zakazi
+        except Exception:
+            return []
     def do_zakaz(self, zakaz):
         if zakaz is None or hasattr(zakaz, 'mock_calls'):
             return {}
+
         try:
+            # Собираем необходимые блоки с проверками
             id_stat_block = zakaz.find("div", class_="d-flex registry-entry__header-mid align-items-center")
             right_block = zakaz.find("div", class_="col col d-flex flex-column registry-entry__right-block b-left")
+
+            # Проверяем, что все необходимые блоки найдены
             if not id_stat_block or not right_block:
                 return {}
+
             data_block = right_block.find("div", class_="data-block mt-auto")
             if not data_block:
                 return {}
+
             published = data_block.find_all("div", "col-6")
             if len(published) < 2:
                 return {}
+
+            # Получаем элементы с проверками
             date_published_elem = published[0].find("div", class_="data-block__value")
             date_update_elem = published[1].find("div", class_="data-block__value")
             status_elem = id_stat_block.find("div", class_="registry-entry__header-mid__title text-normal")
@@ -39,22 +50,31 @@ class parser_zakazi:
             id_element = id_stat_block.find("a")
             zakazchik_block = zakaz.find("div", class_="registry-entry__body-href")
             price_element = right_block.find("div", class_="price-block__value")
+
+            # Проверяем, что все элементы существуют
             if not all([date_published_elem, date_update_elem, status_elem, title_block,
                         id_element, zakazchik_block, price_element]):
                 return {}
+
+            # Получаем текст из элементов
             date_published = date_published_elem.get_text(strip=True)
             date_update = date_update_elem.get_text(strip=True)
             status = status_elem.get_text(strip=True)
-            title_elem = title_block.find("div", class_="registry-entry__body-value")
-            if not title_elem:
-                return {}
-            title = title_elem.get_text(strip=True)
+
+            # Исправляем получение заголовка - убираем лишний поиск
+            title = title_block.get_text(strip=True)
+
             id_text = id_element.get_text(strip=True)
             zakazchik = zakazchik_block.get_text(strip=True)
             price = price_element.get_text(strip=True)
+            # Получаем ссылки
             zakazchik_href_elem = zakazchik_block.find("a")
-            zakazchik_href = zakazchik_href_elem["href"] if zakazchik_href_elem else ""
-            zakaz_href = "https://zakupki.gov.ru/" + id_element["href"]
+            zakaz_href = ''
+            zakazchik_href = ''
+            if zakazchik_href_elem and zakazchik_href_elem.has_attr("href"):
+                zakazchik_href = zakazchik_href_elem["href"]
+            if id_element.has_attr("href"):
+                zakaz_href = "https://zakupki.gov.ru/" + id_element["href"]
             if id_text and price and zakazchik:
                 data = {
                     'date_published': date_published,
