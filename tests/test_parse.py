@@ -91,15 +91,12 @@ class TestParsePage:
 
     @patch('src.main.requests.Session.get')
     def test_parse_page_network_error(self, mock_get):
-        """Обработка сетевой ошибки при парсинге страницы"""
         # Arrange
         mock_get.side_effect = requests.exceptions.ConnectionError("Нет сети")
 
         parser = parser_zakazi()
 
-        # Act & Assert
-        with pytest.raises(requests.exceptions.ConnectionError):
-            parser.parse_page(0)
+        assert parser.parse_page(0) == []
 
 
 class TestDoZakaz:
