@@ -22,7 +22,7 @@ class parser_zakazi:
         except Exception:
             return []
     def do_zakaz(self, zakaz):
-        if zakaz is None or hasattr(zakaz, 'mock_calls'):
+        if zakaz is None:
             return {}
 
         try:
