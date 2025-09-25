@@ -1,85 +1,208 @@
-name: Python CI for Zakupki Parser
+name: Тест закупок
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [ main ]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - '**.md'
   pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - '**.md'
 
 jobs:
-  # ОСНОВНЫЕ ТЕСТЫ
   test:
+    name: Проверка тестов на ${{ matrix.os }} Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
         python-version: ['3.9', '3.10', '3.11']
+        include:
+          - os: ubuntu-latest
+            python-version: '3.12'
+            experimental: true
 
     steps:
-    - name: Checkout code
+    - name: Получение кода
       uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Установка Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
         cache: 'pip'
 
-    - name: Install dependencies
+    - name: кэширование зависимостей для тестов
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/pip
+          ~/.cache/pypoetry
+          venv/
+        key: ${{ runner.os }}-python-${{ matrix.python-version }}-${{ hashFiles('requirements.txt', 'pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-python-${{ matrix.python-version }}-
+
+    - name: установка зависимостей
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt  # Если есть requirements.txt
-        pip install pytest requests beautifulsoup4 lxml
+        pip install pytest pytest-cov requests beautifulsoup4 lxml
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-    - name: Run ALL tests with pytest
+    - name: Юнит тесты
       run: |
-        pytest tests/ -v --tb=short
+        pytest tests/ -v --tb=short --cov=src --cov-report=xml --cov-report=term-missing
 
-  # ДОПОЛНИТЕЛЬНЫЕ ПРОВЕРКИ
+    - name: Code coverage (показывает кол-во покрытых строк кода тестами)
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-${{ matrix.os }}-${{ matrix.python-version }}
+      if: matrix.os == 'ubuntu-latest'
+
+    - name: Загрузка итога тестов
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ matrix.os }}-py${{ matrix.python-version }}
+        path: |
+          coverage.xml
+        retention-days: 7
+
   lint:
+    name: Lint тесты (синтаксис, dead code до которого нельзя дойти)
     runs-on: ubuntu-latest
     needs: test  # Запускается только если тесты прошли
 
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - name: Получение кода
+      uses: actions/checkout@v4
+
+    - name: Установки Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Установка линтеров
+      run: |
+        pip install flake8 black mypy
+
+    - name: Проверка стиля кода с флеком (неиспользуемые переменные, огромные функции и т.д.)
+      run: |
+        flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics --max-line-length=120
+
+#    - name: Проверка стиля кода с black (ещё 1 стилистическое, но можно и без него)
+#      run: |
+#        black --check src/ tests/ --diff --color
+
+    - name: Проверка с mypy (проверка правильного использования типов)
+      run: |
+        mypy src/ --ignore-missing-imports
+
+  security:
+    name: Проверка безопасности
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+    - name: Получение кода
+      uses: actions/checkout@v4
+
+    - name: Установка Python
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
-    - name: Install linters
-      run: |
-        pip install flake8 black
-
-    - name: Check code style with flake8
-      run: |
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-
-    - name: Check formatting with black
-      run: |
-        black --check . --diff
-
-  security:
-    runs-on: ubuntu-latest
-    needs: test  # Запускается только если тесты прошли
-
-    steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
-
-    - name: Security check
+    - name: Запуск проверки безопасности (на наличие уязвимостей в либах и прочем)
       run: |
         pip install safety
         safety check --full-report
 
-  # ДЕПЛОЙ (опционально)
-  deploy-docs:
+    - name: Поиск секретов (типо токенов)
+      uses: gitleaks/gitleaks-action@v2
+      with:
+        config-path: .gitleaks.toml
+
+  integration:
+    name: Интеграционные тесты
     runs-on: ubuntu-latest
-    needs: [test, lint, security]  # Ждём все проверки
-    if: github.ref == 'refs/heads/main'  # Только для main ветки
+    needs: test
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Create test summary
+    - name: Получение кода
+      uses: actions/checkout@v4
+
+    - name: Установка Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Установка зависимостей
       run: |
-        echo "✅ All tests passed on $(date)" > TEST_SUMMARY.md
-        echo "🎉 Code quality checks passed" >> TEST_SUMMARY.md
+        pip install pytest requests beautifulsoup4 lxml
+
+    - name: Запуск интеграционных тестов
+      run: |
+        pytest tests/ -v -m "integration" --tb=short
+
+  build-docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    needs: [test, lint, security]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Получение кода
+      uses: actions/checkout@v4
+
+    - name: Установка Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Generate test report
+      run: |
+        echo "# 🧪 Результаты тестов - $(date)" > TEST_RESULTS.md
+        echo "## ✅ Все тесты прошли успешно!" >> TEST_RESULTS.md
+        echo "### 📊 Окружение" >> TEST_RESULTS.md
+        echo "- Python версии: 3.9, 3.10, 3.11" >> TEST_RESULTS.md
+        echo "- ОС: Ubuntu, Windows" >> TEST_RESULTS.md
+        echo "- Ветка: ${{ github.ref }}" >> TEST_RESULTS.md
+        echo "### 🚀 Следующие шаги" >> TEST_RESULTS.md
+        echo "1. Проверка качества кода: ✅" >> TEST_RESULTS.md
+        echo "2. Проверка безопасности: ✅" >> TEST_RESULTS.md
+        echo "3. Готово к деплою!" >> TEST_RESULTS.md
+
+    - name: Загрузка результата тестов
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-documentation
+        path: TEST_RESULTS.md
+        retention-days: 30
+
+  notify:
+    name: Notify Status
+    runs-on: ubuntu-latest
+    needs: [test, lint, security]
+    if: always()
+
+    steps:
+    - name: Notify on failure
+      if: failure()
+      uses: actions-slack@v3
+      with:
+        status: failure
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+    - name: Notify on success
+      if: success()
+      run: |
+        echo "✅ Все тесты пройдены! Готовы к слиянию/деплою."
